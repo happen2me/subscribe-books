@@ -1,4 +1,3 @@
-import https from 'https';
 import client from 'mailchimp-marketing';
 
 const dc = 'us11';
@@ -26,6 +25,7 @@ async function register_subscriber(kindle_email){
     });
     console.log("Status code: " + response.statusCode);
     console.log(response);
+    return response;
 }
 
 async function get_subscriber_hash(kindle_email){
@@ -65,6 +65,11 @@ async function get_subscribed_books(kindle_email){
     }
 }
 
+/**
+ * Get a list of notes associated with the subscriber
+ * @param {str} subscriber_hash 
+ * @returns 
+ */
 async function get_notes(subscriber_hash){
     const response = await client.lists.getListMemberNotes(
         list_id,
@@ -73,6 +78,12 @@ async function get_notes(subscriber_hash){
     return response.notes;
 }
 
+/**
+ * Get the primary note of the subscriber. If there is no notes associated with
+ * the subscriber, create a new one and return it.
+ * @param {str} subscriber_hash 
+ * @returns the primary Mailchimp note of the subscriber
+ */
 async function get_or_create_primary_note(subscriber_hash){
     let notes = await get_notes(subscriber_hash);
     let note = null;
@@ -92,6 +103,14 @@ async function get_or_create_primary_note(subscriber_hash){
     return note;
 }
 
+/**
+ * This function checks whether a note (note attr of the Mailchimp note)
+ * can be parsed as a JSON object. If yes, it further checks whether the
+ * object has the subscribed_books and sent_books attributes. If not, it
+ * returns the default note.
+ * @param {*} note_content 
+ * @returns 
+ */
 function vaidate_and_parse_note(note_content){
     // This function checks whether the note has the key subscribed_books
     // as a list and sent_books as a dictionary
@@ -111,8 +130,24 @@ function vaidate_and_parse_note(note_content){
     return note;
 }
 
+async function update_note(subscriber_hash, note_id, note_content){
+    const updated_note = await client.lists.updateListMemberNote(
+        list_id,
+        subscriber_hash,
+        note_id,
+        {"note": JSON.stringify(note_content)}
+    );
+    return updated_note;
+}
+
+/**
+ * Subscribe a book to the subscriber.
+ * It uses the mailchimp notes associated with users as a simple storage.
+ * @param {str} kindle_email 
+ * @param {str} book_name 
+ * @returns 
+ */
 async function subscribe_book(kindle_email, book_name){
-    // use the mailchimp notes as a simple storage
     // check whether there are already notes associated with the user
     const subscriber_hash = await get_subscriber_hash(kindle_email);
     if (subscriber_hash == ""){
@@ -125,15 +160,48 @@ async function subscribe_book(kindle_email, book_name){
         note_content.subscribed_books.push(book_name);
     }
     // Update the note
-    const updated_subscribes = await client.lists.updateListMemberNote(
-        list_id,
-        subscriber_hash,
-        primary_note.id,
-        {"note": JSON.stringify(note_content)}
-    );
+    const updated_subscribes = update_note(subscriber_hash, primary_note.id, note_content);
     return updated_subscribes;
 }
 
+async function unsubscribe_book(kindle_email, book_name){
+    // check whether there are already notes associated with the user
+    const subscriber_hash = await get_subscriber_hash(kindle_email);
+    if (subscriber_hash == ""){
+        console.log("Error: the subscriber is not found");
+        return;
+    }
+    let primary_note = await get_or_create_primary_note(subscriber_hash);
+    let note_content = vaidate_and_parse_note(primary_note.note);
+    // Remove the book from the subscribed_books
+    note_content.subscribed_books = note_content.subscribed_books.filter(
+        (item) => item !== book_name
+    );
+    // Update the note
+    const updated_subscribes = await update_note(subscriber_hash, primary_note.id, note_content);
+    return updated_subscribes;
+}
+
+
+
+async function update_subscribed_books(kindle_email, book_names){
+    // check whether there are already notes associated with the user
+    const subscriber_hash = await get_subscriber_hash(kindle_email);
+    if (subscriber_hash == ""){
+        console.log("Error: the subscriber is not found");
+        return;
+    }
+    let primary_note = await get_or_create_primary_note(subscriber_hash);
+    let note_content = vaidate_and_parse_note(primary_note.note);
+    // Directly replace the subscribed_books list
+    note_content.subscribed_books = book_names;
+    // Update the note
+    const updated_note = await update_note(subscriber_hash, primary_note.id, note_content);
+    return updated_note;
+}
+
+export {get_subscribers, register_subscriber, remove_subscriber, subscribe_book,
+    unsubscribe_book, update_subscribed_books};
 
 // let data = {
 //     user_id: '123',
