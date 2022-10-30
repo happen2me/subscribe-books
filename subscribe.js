@@ -1,8 +1,14 @@
 import client from 'mailchimp-marketing';
 
-const dc = 'us11';
-const list_id = '82caff5ec9';
-const apikey = '57fb1ae1270fdda2f74319a44bdc7088-us11';
+/**
+ * Required env variables:
+ * MAILCHIMP_API_KEY
+ * MAILCHIMP_LIST_ID
+ * MAILCHIMP_SERVER_PREFIX
+ */
+const dc = process.env.MAILCHIMP_SERVER_PREFIX;
+const list_id = process.env.MAILCHIMP_LIST_ID;
+const apikey = process.env.MAILCHIMP_API_KEY;
 
 client.setConfig({
     apiKey: apikey,
@@ -12,24 +18,66 @@ client.setConfig({
 // create a default note for the book
 const default_note = {subscribed_books:[], sent_books:{}};
 
+/**
+ * This function returns a list of raw subscriber objects
+ * @returns a list of subscribers in Chimpmail format
+ */
 async function get_subscribers(){
     const response = await client.lists.getListMembersInfo(list_id);
     console.log("The list has " + response.members.length + " members");  
     return response.members;  
 }
 
+async function get_subscriber(subscriber_hash=null, subscriber_email=null){
+    let response = null;
+    if (subscriber_hash != null){
+        response = await client.lists.getListMember(
+            list_id,
+            subscriber_hash
+        );
+    }
+    else{
+        // get subscriber with subscriber_email
+        const subscribers = await get_subscribers();
+        for (const s of subscribers) {
+            if (s.email_address == subscriber_email){
+                response = s;
+                break;
+            }
+        }
+        if (response == null){
+            console.log("Error: the subscriber with email " + subscriber_email + " is not found");
+        }
+    }
+    return response;
+}
+
 async function register_subscriber(kindle_email){
-    const response = await client.lists.addListMember(list_id, {
-        email_address: kindle_email,
-        status: 'subscribed',
-    });
-    console.log("Status code: " + response.statusCode);
-    console.log(response);
+    // catch bad request
+    let response = null;
+    try{
+        response = await client.lists.addListMember(list_id, {
+            email_address: kindle_email,
+            status: 'subscribed',
+        });
+        console.log("Status code: " + response.status);
+    }
+    catch(err){
+        // if member already exists, inform caller
+        if (err.response.body.title == "Member Exists"){
+            response = err.response.body;
+        }
+        // else, throw the error
+        else{
+            throw err;
+        }
+    }    
     return response;
 }
 
 async function get_subscriber_hash(kindle_email){
     let subscribers = await get_subscribers();
+    console.log("subscribers", subscribers)
     let subscriber_hash = "";
     for (const subscriber of subscribers) {
         console.log("email:" + subscriber.email_address);
@@ -54,15 +102,6 @@ async function remove_subscriber(kindle_email){
     );
     console.log(response === true);
     return true;
-}
-
-async function get_subscribed_books(kindle_email){
-    // use the memo as a simple storage
-    const subscriber_hash = await get_subscriber_hash(kindle_email);
-    if (subscriber_hash == ""){
-        console.log("Error: the subscriber is not found");
-        return;
-    }
 }
 
 /**
@@ -108,10 +147,11 @@ async function get_or_create_primary_note(subscriber_hash){
  * can be parsed as a JSON object. If yes, it further checks whether the
  * object has the subscribed_books and sent_books attributes. If not, it
  * returns the default note.
- * @param {*} note_content 
- * @returns 
+ * @param {str} note_content A note to be parsed
+ * @returns A subscription dict: {subscribed_books:[], sent_books:{}}
  */
 function vaidate_and_parse_note(note_content){
+    note_content = note_content.replace(/&quot;/g,'"')
     // This function checks whether the note has the key subscribed_books
     // as a list and sent_books as a dictionary
     let note = {};
@@ -130,6 +170,13 @@ function vaidate_and_parse_note(note_content){
     return note;
 }
 
+/**
+ * Update the note of the subscriber
+ * @param {str} subscriber_hash 
+ * @param {str} note_id 
+ * @param {dict} note_content A dict that looks like {subscribed_books:[], sent_books:{}}
+ * @returns 
+ */
 async function update_note(subscriber_hash, note_id, note_content){
     const updated_note = await client.lists.updateListMemberNote(
         list_id,
@@ -183,7 +230,12 @@ async function unsubscribe_book(kindle_email, book_name){
 }
 
 
-
+/**
+ * Update subscription list of a user
+ * @param {str} kindle_email the user to update
+ * @param {list} book_names The books to update, it must be a list of strings
+ * @returns A Mailchimp note
+ */
 async function update_subscribed_books(kindle_email, book_names){
     // check whether there are already notes associated with the user
     const subscriber_hash = await get_subscriber_hash(kindle_email);
@@ -200,8 +252,62 @@ async function update_subscribed_books(kindle_email, book_names){
     return updated_note;
 }
 
-export {get_subscribers, register_subscriber, remove_subscriber, subscribe_book,
-    unsubscribe_book, update_subscribed_books};
+async function convert_subscriber_detail(subscriber){
+
+    // If there is no last note, create a new note
+    let primary_note = null;
+    if (!subscriber.hasOwnProperty('last_note')){
+        primary_note = await get_or_create_primary_note(subscriber.id);
+    }
+    else{
+        primary_note = subscriber.last_note;
+    }
+    let subscriber_detail = vaidate_and_parse_note(primary_note.note);
+    subscriber_detail.id = subscriber.id;
+    subscriber_detail.email_address = subscriber.email_address;
+    subscriber_detail.note_id = primary_note.note_id;
+    subscriber_detail.status = subscriber.status;
+    return subscriber_detail;
+}
+
+/**
+ * Get the list of subscribers in the following format:
+ * {id: str, email_address: str, status: str, note_id: number, subscribed_books: list,
+ * sent_books: dict}
+ */
+async function get_subscribers_detail(){
+    const subscribers = await get_subscribers();
+    let subscribers_detail = [];
+    for (const subscriber of subscribers){
+        subscriber_detail = await convert_subscriber_detail(subscriber);
+        subscribers_detail.push(subscriber_detail);
+    }
+    return subscribers_detail;
+}
+
+async function get_subscriber_detail(kindle_email=null, subscriber_hash=null){
+    let subscriber = null;
+    if (subscriber_hash == null){
+        if (kindle_email == null){
+            console.log("Error: kindle_email and subscriber_hash are both null");
+            return;
+        }
+        // if using email as search key, directly get subscriber from all subscribers
+        subscriber = await get_subscriber(null, kindle_email);
+    }
+    else{
+        subscriber = await get_subscriber(subscriber_hash);
+    }
+    
+    const subscriber_detail = await convert_subscriber_detail(subscriber);
+    return subscriber_detail;
+}
+
+
+
+export {register_subscriber, remove_subscriber, subscribe_book,
+    unsubscribe_book, update_subscribed_books, get_subscribers_detail,
+    update_note, get_subscriber_detail};
 
 // let data = {
 //     user_id: '123',
@@ -225,3 +331,24 @@ export {get_subscribers, register_subscriber, remove_subscriber, subscribe_book,
 // console.log(response);
 
 // subscribe_book("y.c@mail.com", "new_yorker")
+// const updated = await subscribe_book("y.c@mail.com", 'book3');
+// console.log(updated);
+
+// test get_subscribers
+// const subscribers = await get_subscribers();
+// for(const subscriber of subscribers){
+//     console.log(subscriber.email_address);
+//     if (subscriber.hasOwnProperty('last_note')){
+//         console.log(JSON.parse(subscriber.last_note.note.replace(/&quot;/g,'"')));
+//     }
+// }
+
+
+// Test get_subscribers_detail
+
+// const note = await update_subscribed_books("immr.shen@gmail.com", ["economist", "new_yorker"])
+// const subscribers_detail = await get_subscribers_detail();
+// console.log(subscribers_detail);
+
+// const detail = await get_subscriber_detail("immr.shen@gmail.com")
+// console.log(detail);
