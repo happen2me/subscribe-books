@@ -1,0 +1,50 @@
+
+body {
+    height: 100%;
+    /*Set default font to robot*/
+    font-family: 'Roboto', sans-serif;
+}
+
+.bg{
+    background-image: url("/images/book-background.jpg");
+    /* Full height */
+    height: 100%;
+
+    /* Center and scale the image nicely */
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+
+    /* More styles */
+    /* display: -ms-flexbox;
+    display: -webkit-box;
+    display: flex;
+    -ms-flex-align: center;
+    -ms-flex-pack: center;
+    -webkit-box-align: center;
+    align-items: center;
+    -webkit-box-pack: center;
+    justify-content: center;
+    padding-top: 40px;
+    padding-bottom: 40px; */
+    /* display: flex;
+    justify-content: center;
+    align-items: center; */
+}
+
+.center-screen {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+
+.vert-margin{
+    margin-top: 0.5rem
+}
+
+.foot-note {
+    position: absolute;
+    bottom: 0.5rem;
+    text-align: center;
+}

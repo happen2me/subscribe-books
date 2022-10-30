@@ -1,0 +1,29 @@
+<%- include('header') -%>
+<div class="row justify-content-md-center center-screen">
+<div class="col-sm-8 col-lg-4 gy-2">
+  <form action="/update" method="post">
+    <%  for (const [book_id, book_name] of Object.entries(booksAvailable)) { %>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" value="" id="<%= book_id %> <%= booksSubscribed.includes(book_id) ? 'checked' : '' %>">
+        <label class="form-check-label" for="flexCheckDefault">
+          <%=  book_name  %>
+        </label>
+      </div>
+    <% }; %>
+    <select class="form-select bg-transparent vert-margin" aria-label="Default select example">
+      <% for( const format of formats ) { %>
+        <option value="<%= format %> "><%= format %> </option>
+      <% } %>
+    </select>
+    <button type="submit" name="list" class="btn btn-primary vert-margin">Update Subscription</button>
+  </form>
+</div>
+<p class="foot-note">Please add nyankoo@yandex.com to your kindle's trust list.</p>
+</div>
+
+<script>
+    $(document).ready(function(){
+      $('select').formSelect();
+    });
+</script>
+<%- include('footer') -%>
