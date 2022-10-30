@@ -4,13 +4,13 @@ import request from 'request';
 import https from 'https';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { register_subscriber } from './subscribe.js';
+// import { register_subscriber } from './subscribe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 
 const app = express();
-
+app.use('/materialize', express.static(__dirname + '/node_modules/materialize-css/dist/'));
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -18,7 +18,21 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json())
 
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
+        // res.sendFile(__dirname + '/index.html');
+        res.render('index');
+});
+
+app.get('/subscription', (req, res) => {
+    const books_available = {'economist': 'The Economist',
+                             'new_yorker': 'New Yorker',
+                             'atlantic': 'The Atlantic',
+                             'wired': 'Wired',
+                             'guardian': 'The Guardian'}
+    res.render("list", {booksAvailable: books_available,
+        booksSubscribed: ['economist'],
+        pageTitle: 'Subscription',
+        formats: ['mobi', 'epub', 'pdf'],
+        selectedFormat: 'mobi'});
     });
 
 app.post('/payload', (req, res) => {
