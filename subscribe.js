@@ -1,4 +1,5 @@
 import client from 'mailchimp-marketing';
+import { MD5 } from "md5-js-tools";
 
 /**
  * Required env variables:
@@ -30,37 +31,38 @@ async function get_subscribers(){
 
 async function get_subscriber(subscriber_hash=null, subscriber_email=null){
     let response = null;
-    if (subscriber_hash != null){
-        response = await client.lists.getListMember(
-            list_id,
-            subscriber_hash
-        );
-    }
-    else{
-        // get subscriber with subscriber_email
-        const subscribers = await get_subscribers();
-        for (const s of subscribers) {
-            if (s.email_address == subscriber_email){
-                response = s;
-                break;
-            }
+    if (subscriber_hash == null){
+        if (subscriber_email == null){
+            throw new Error("Must provide either subscriber_hash or subscriber_email");
         }
-        if (response == null){
-            console.log("Error: the subscriber with email " + subscriber_email + " is not found");
-        }
+        subscriber_hash = await get_subscriber_hash(subscriber_email);
     }
+    response = await client.lists.getListMember(
+        list_id,
+        subscriber_hash
+    );
     return response;
 }
 
+/**
+ * Register a new subscriber to the list
+ * @param {str} kindle_email 
+ * @returns if the subscriber exists, return the error response body. If successfully
+ * registered, return the response object. Otherwise, throw an error.
+ */
 async function register_subscriber(kindle_email){
     // catch bad request
     let response = null;
     try{
+        console.log("Registering a new subscriber: " + kindle_email);
         response = await client.lists.addListMember(list_id, {
             email_address: kindle_email,
             status: 'subscribed',
+            merge_fields: {
+                FORMAT: 'mobi'
+            }
         });
-        console.log("Status code: " + response.status);
+        console.log("Subscribed with status code: " + response.status);
     }
     catch(err){
         // if member already exists, inform caller
@@ -76,25 +78,13 @@ async function register_subscriber(kindle_email){
 }
 
 async function get_subscriber_hash(kindle_email){
-    let subscribers = await get_subscribers();
-    console.log("subscribers", subscribers)
-    let subscriber_hash = "";
-    for (const subscriber of subscribers) {
-        console.log("email:" + subscriber.email_address);
-        if (subscriber.email_address == kindle_email){
-            subscriber_hash = subscriber.id;
-            break;
-        }
-    }
+    const subscriber_hash = MD5.generate(kindle_email.toLowerCase());
     return subscriber_hash;
 }
 
 async function remove_subscriber(kindle_email){
     // first get the subscriber hash
     const subscriber_hash = await get_subscriber_hash(kindle_email);
-    if (subscriber_hash == ""){
-        console.log("Error: the subscriber is not found");
-    }
     console.log("subscriber hash: " + subscriber_hash);
     const response = await client.lists.deleteListMemberPermanent(
         list_id,
@@ -197,10 +187,6 @@ async function update_note(subscriber_hash, note_id, note_content){
 async function subscribe_book(kindle_email, book_name){
     // check whether there are already notes associated with the user
     const subscriber_hash = await get_subscriber_hash(kindle_email);
-    if (subscriber_hash == ""){
-        console.log("Error: the subscriber is not found");
-        return;
-    }
     let primary_note = await get_or_create_primary_note(subscriber_hash);
     let note_content = vaidate_and_parse_note(primary_note.note);
     if (!note_content.subscribed_books.includes(book_name)){
@@ -267,6 +253,11 @@ async function convert_subscriber_detail(subscriber){
     subscriber_detail.email_address = subscriber.email_address;
     subscriber_detail.note_id = primary_note.note_id;
     subscriber_detail.status = subscriber.status;
+    let format = subscriber.merge_fields.FORMAT;
+    if (format == ""){
+        format = "mobi";
+    }
+    subscriber_detail.format = format;
     return subscriber_detail;
 }
 
@@ -298,7 +289,6 @@ async function get_subscriber_detail(kindle_email=null, subscriber_hash=null){
     else{
         subscriber = await get_subscriber(subscriber_hash);
     }
-    
     const subscriber_detail = await convert_subscriber_detail(subscriber);
     return subscriber_detail;
 }
@@ -352,3 +342,9 @@ export {register_subscriber, remove_subscriber, subscribe_book,
 
 // const detail = await get_subscriber_detail("immr.shen@gmail.com")
 // console.log(detail);
+// // log MD5 hash of the email
+// console.log(MD5.generate("immr.shen@gmail.com"));
+
+// test register_subscriber
+// const response = await register_subscriber("xyz@xyz.com");
+// console.log(response);
