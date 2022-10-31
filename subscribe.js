@@ -225,10 +225,6 @@ async function unsubscribe_book(kindle_email, book_name){
 async function update_subscribed_books(kindle_email, book_names){
     // check whether there are already notes associated with the user
     const subscriber_hash = await get_subscriber_hash(kindle_email);
-    if (subscriber_hash == ""){
-        console.log("Error: the subscriber is not found");
-        return;
-    }
     let primary_note = await get_or_create_primary_note(subscriber_hash);
     let note_content = vaidate_and_parse_note(primary_note.note);
     // Directly replace the subscribed_books list
@@ -236,6 +232,16 @@ async function update_subscribed_books(kindle_email, book_names){
     // Update the note
     const updated_note = await update_note(subscriber_hash, primary_note.id, note_content);
     return updated_note;
+}
+
+async function update_subscribed_format(kindle_email, format){
+    const subscriber_hash = await get_subscriber_hash(kindle_email);
+    const response = await client.lists.updateListMember(
+        list_id,
+        subscriber_hash,
+        {merge_fields: {FORMAT: format}}
+      );
+    return response;
 }
 
 async function convert_subscriber_detail(subscriber){
@@ -297,7 +303,7 @@ async function get_subscriber_detail(kindle_email=null, subscriber_hash=null){
 
 export {register_subscriber, remove_subscriber, subscribe_book,
     unsubscribe_book, update_subscribed_books, get_subscribers_detail,
-    update_note, get_subscriber_detail};
+    update_note, get_subscriber_detail, update_subscribed_format};
 
 // let data = {
 //     user_id: '123',

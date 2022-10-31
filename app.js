@@ -4,7 +4,7 @@ import request from 'request';
 import https from 'https';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { register_subscriber, get_subscriber_detail } from './subscribe.js';
+import { register_subscriber, get_subscriber_detail, update_subscribed_books, update_subscribed_format } from './subscribe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -36,14 +36,6 @@ app.get('/subscription', (req, res) => {
         selectedFormat: 'mobi'});
     });
 
-app.post('/payload', (req, res) => {
-    // push = JSON.parse(req.body);
-    // console.log("Got message: " + push);
-    // res.send(push)
-    console.log('body: ' + req.body.JSON);
-    res.json(req.body);
-})
-
 app.post('/register', async (req, res) => {
     const email = req.body.email;
     // try catch on async function
@@ -51,21 +43,23 @@ app.post('/register', async (req, res) => {
         const response = await register_subscriber(email);
         if (response.status == 400) {
             // the subscriber already exist, make a toast that redirects to subscription page
-
+            console.log("Subscriber already exist, redirecting to subscription page");
         }
         else {
             // make a toast that the registration is successful
-            
+            console.log("Subscriber registered successfully");
         }
         // redirect to subscription page
         const subscriber_detail = await get_subscriber_detail(email);
-        console.log('subscriber_detail');
-        console.log(subscriber_detail);
-        res.render("list", {booksAvailable: books_available,
+        // console.log('subscriber_detail');
+        // console.log(subscriber_detail);
+        res.render("list", {
+            email_address: subscriber_detail.email_address,
+            booksAvailable: books_available,
             booksSubscribed: subscriber_detail.subscribed_books,
             pageTitle: 'Subscription',
             formats: formats_available,
-            selectedFormat: 'mobi'});
+            selectedFormat: subscriber_detail.format});
 
     } catch (error) {
         console.log(error);
@@ -74,13 +68,26 @@ app.post('/register', async (req, res) => {
     
 });
 
-app.post('/', (req, res) => {
-    
+app.post('/update', async (req, res) => {
+    // it has keys email_address, subscribed_books, format, previous(subscribed_books, format)
     const bodyData = req.body;
-    // console.log("body: " + JSON.stringify(bodyData))
-    console.log(bodyData);
-    res.sendFile(__dirname + '/index.html');
+    const subscribed_books = bodyData.subscribed_books;
+    const subscribed_format = bodyData.format.trim();
+    const email_address = bodyData.email_address;
+    const previous_format = bodyData.previous.format;
+    const previous_subscribed_books = bodyData.previous.subscribed_books;
+    if (previous_format !== subscribed_format) {
+        // async function
+        let response = await update_subscribed_format(email_address, subscribed_format);
+        // log response status
+        console.log("update_subscribed_format response: " + response.merge_fields.FORMAT);
+    }
+    // async function
+    let updated_note = await update_subscribed_books(email_address, subscribed_books);
+    console.log("update_subscribed_books response: " + updated_note.note);
+    res.render('index', {pageTitle: 'Sign Up'});
     });
+
 
 let port = process.env.PORT || 4567;
 app.listen(port, () => {
