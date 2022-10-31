@@ -39,10 +39,6 @@ body {
     min-height: 100vh;
   }
 
-.vert-margin{
-    margin-top: 0.5rem
-}
-
 .foot-note {
     position: absolute;
     bottom: 0.5rem;

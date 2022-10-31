@@ -2,16 +2,11 @@ import path from 'path';
 import nodemailer from 'nodemailer';
 import { update_note, get_subscribers_detail } from './subscribe.js';
 
-// setup transporter with AOL email
-// let transporter = nodemailer.createTransport({
-//     host: "smtp.aol.com",
-//     port: 587,
-//     secure: false, // true for 465, false for other ports
-//     auth: {
-//         user: process.env.AOL_EMAIL, // generated ethereal user
-//         pass: process.env.AOL_PASSWORD, // generated ethereal password
-//     },
-// });
+/**
+ * Required env variables:
+ * YANDEX_EMAIL
+ * YANDEX_PASSWORD
+ */
 
 
 // Set up transporter with yandex.com
