@@ -2,6 +2,7 @@ import { Octokit } from "octokit";
 import git from 'isomorphic-git'
 import http from 'isomorphic-git/http/node/index.cjs';
 import fs  from 'fs'
+import https from 'https';
 
 const supported_format = 'mobi';
 
@@ -82,19 +83,62 @@ function get_latest_in_group(group){
     return latest;
 }
 
-export async function get_latest_books(owner, repo){
+async function get_latest_books(owner, repo){
     const files = await get_files(owner, repo);
     let grouped = group_files(files);
     let latest = get_latest_in_group(grouped);
     return latest
 }
 
+async function download_file(owner, repo, branch, path, dst_folder){
+    const file_url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+    const file_name = path.split('/').slice(-1)[0];
+    const file_path = `${dst_folder}/${file_name}`;
+    https.get(file_url, (res) => {
+        const filePath = fs.createWriteStream(file_path);
+        res.pipe(filePath);
+        filePath.on('finish', () => {
+            filePath.close();
+            console.log(`Successfully downloaded ${file_name}`);
+        });
+    })
+}
+
+async function download_latest_books(owner, repo, dst_folder){
+    const latest = await get_latest_books(owner, repo);
+    for (const [k, v] of Object.entries(latest)){
+        // check whether the file exists
+        const file_name = v.split('/').slice(-1)[0];
+        const file_folder = `${dst_folder}/${k}`;
+        const file_path = `${file_folder}/${file_name}`;
+        if (!fs.existsSync(file_path)){
+            // create the folder if it doesn't exist
+            if (!fs.existsSync(file_folder)){
+                fs.mkdirSync(file_folder);
+            }
+            // If their exists old files in file_folder, delete them
+            fs.readdirSync(file_folder).forEach(file => {
+                fs.unlinkSync(`${file_folder}/${file}`);
+                console.log(`Deleted ${file}`);
+            });
+            // download the latest file
+            await download_file(owner, repo, 'master', v, file_folder);
+        }
+    }
+}
+
+export {get_latest_books, download_latest_books}
 
 // test get files
-const files = await get_files('hehonghui', 'awesome-english-ebooks');
-console.log(files.length);
-let grouped = group_files(files);
-console.log(grouped);
-let latest = get_latest_in_group(grouped);
-console.log(latest);
+// const files = await get_files('hehonghui', 'awesome-english-ebooks');
+// console.log(files.length);
+// let grouped = group_files(files);
+// console.log(grouped);
+// let latest = get_latest_in_group(grouped);
+// console.log(latest);
 
+// test download file
+// await download_file('hehonghui', 'awesome-english-ebooks', 'master', '02_new_yorker/2021.10.18/TheNewYorker.2021.10.18.epub', 'download')
+
+// test download latest books
+// await download_latest_books('hehonghui', 'awesome-english-ebooks', 'download')
