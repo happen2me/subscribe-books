@@ -1,4 +1,4 @@
-import client from 'mailchimp-marketing';
+import client from '@mailchimp/mailchimp_marketing';
 import { MD5 } from "md5-js-tools";
 
 /**
@@ -66,6 +66,7 @@ async function register_subscriber(kindle_email){
     }
     catch(err){
         // if member already exists, inform caller
+        // console.log(err)
         if (err.response.body.title == "Member Exists"){
             response = err.response.body;
         }
